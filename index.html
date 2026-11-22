@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Расписание · редактор</title>
+<style>
+:root {
+  --bg: #f3f2fa; --panel: #ffffff; --text: #17132b; --muted: #6b6785; --line: #d9d6ea;
+  --accent: #6d4aff; --on: #ffffff; --ok: #14a36b; --err: #d03050; --field: #f7f6fc;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e0d16; --panel: #181624; --text: #f2f0ff; --muted: #9b97b4; --line: #2b2840;
+    --accent: #975cff; --on: #ffffff; --ok: #4ade9f; --err: #ff7a8c; --field: #110f1c;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.45; }
+main { max-width: 760px; margin: 0 auto; padding: 18px 16px 120px; display: flex; flex-direction: column; gap: 14px; }
+h1 { font-size: 22px; margin: 4px 0 0; }
+h2 { font-size: 17px; margin: 0 0 10px; }
+.sub { color: var(--muted); margin: 2px 0 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+details > summary { cursor: pointer; font-weight: 700; font-size: 17px; list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::after { content: "▾"; float: right; color: var(--muted); }
+details[open] > summary::after { content: "▴"; }
+details[open] > summary { margin-bottom: 12px; }
+label { display: block; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 10px 0 4px; }
+input, textarea, select {
+  font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line);
+  border-radius: 10px; padding: 9px 11px; width: 100%; min-width: 0;
+}
+input:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+textarea { min-height: 280px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; resize: vertical; }
+button {
+  font: inherit; font-weight: 600; color: var(--text); background: var(--field); border: 1px solid var(--line);
+  border-radius: 10px; padding: 9px 14px; cursor: pointer;
+}
+button:active { transform: scale(.97); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on); }
+button:disabled { opacity: .55; cursor: default; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row > * { flex: 0 0 auto; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } .grid4 { grid-template-columns: 1fr 1fr; } }
+.brow { display: grid; grid-template-columns: 24px 1fr 14px 1fr; gap: 8px; align-items: center; margin: 7px 0; }
+.brow span.dash { text-align: center; color: var(--muted); }
+.n { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 10px; }
+.tab { padding: 9px 0; text-align: center; }
+.tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--on); }
+.lrow { display: grid; grid-template-columns: 22px 46px 1fr 78px; gap: 8px; align-items: center; margin: 7px 0; }
+.lrow .t { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+code { background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: 13px; word-break: break-all; }
+ol { padding-left: 20px; margin: 8px 0; }
+ol li { margin: 4px 0; }
+.link { display: flex; gap: 8px; margin-top: 6px; }
+.link input { font-size: 12px; }
+.pub { position: fixed; left: 0; right: 0; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+.pub-in { max-width: 760px; margin: 0 auto; display: flex; gap: 12px; align-items: center; }
+#pstat { flex: 1; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+#pstat.ok { color: var(--ok); }
+#pstat.err { color: var(--err); }
+.problems { color: var(--err); margin: 8px 0 0; padding-left: 18px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Расписание · редактор</h1>
+    <p class="sub">Измените расписание здесь, нажмите «Опубликовать», и приложение подхватит его само. Обновлять приложение не нужно.</p>
+  </header>
+
+  <section class="card">
+    <details id="conn">
+      <summary>Подключение к GitHub</summary>
+      <div class="grid2">
+        <div><label for="repo">Репозиторий (имя/репозиторий)</label><input id="repo" placeholder="ivan/raspisanie" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+        <div><label for="path">Файл</label><input id="path" value="schedule.txt" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+        <div><label for="branch">Ветка</label><input id="branch" value="main" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+        <div><label for="token">Токен GitHub</label><input id="token" type="password" placeholder="github_pat_…" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="saveCfg" type="button">Сохранить и загрузить расписание</button>
+        <button id="forget" type="button">Забыть токен</button>
+      </div>
+      <p class="muted small">Токен хранится только в этом браузере и отправляется только на github.com. Не показывайте его другим. Нужен токен с правом <b>Contents: Read and write</b> на один этот репозиторий.</p>
+      <div id="linkBox" hidden>
+        <label for="rawUrl">Ссылка для приложения</label>
+        <div class="link"><input id="rawUrl" readonly><button id="copy" type="button">Копировать</button></div>
+        <p class="muted small">Вставьте её в приложении: «Расписание с сайта».</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>Время звонков</h2>
+    <p class="muted small" style="margin-top:-4px">Быстро заполнить: начало первого урока, длительность урока и перемены.</p>
+    <div class="grid4">
+      <div><label for="g_start">Начало</label><input id="g_start" type="time" value="08:15"></div>
+      <div><label for="g_len">Урок, мин</label><input id="g_len" type="number" min="1" max="120" value="40" inputmode="numeric"></div>
+      <div><label for="g_brk">Перемена, мин</label><input id="g_brk" type="number" min="0" max="60" value="10" inputmode="numeric"></div>
+      <div><label for="g_cnt">Уроков</label><input id="g_cnt" type="number" min="1" max="12" value="7" inputmode="numeric"></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button id="gen" type="button">Заполнить звонки</button></div>
+    <div id="bells" style="margin-top:8px"></div>
+    <div class="row">
+      <button id="addBell" type="button">+ Добавить звонок</button>
+      <button id="delBell" type="button">Убрать последний</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Уроки</h2>
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div id="lessons"></div>
+  </section>
+
+  <section class="card">
+    <details id="textBox">
+      <summary>Текстом (для опытных)</summary>
+      <p class="muted small">То же расписание в виде текста. Можно вставить сюда готовый текст из приложения и нажать «Применить».</p>
+      <textarea id="txt" spellcheck="false" aria-label="Расписание текстом"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button id="applyTxt" type="button">Применить текст</button>
+        <button id="fromTable" type="button">Обновить из таблицы</button>
+      </div>
+    </details>
+  </section>
+</main>
+
+<div class="pub">
+  <div class="pub-in">
+    <div id="pstat" role="status">Загружаю…</div>
+    <button class="primary" id="pub" type="button">Опубликовать</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  var DAYKEY = { 'пн': 1, 'вт': 2, 'ср': 3, 'чт': 4, 'пт': 5, 'сб': 6 };
+  var CFG_KEY = 'schedule-editor.cfg';
+
+  var state = { bells: [], days: {} };
+  var cfg = { repo: '', path: 'schedule.txt', branch: 'main', token: '' };
+  var sha = null, dirty = false, day = 1, busy = false;
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function fmt(min) { return pad(Math.floor(min / 60)) + ':' + pad(min % 60); }
+  function toMin(t) { var m = /^(\d{1,2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : -1; }
+
+  function setStatus(text, kind) {
+    var el = $('pstat');
+    el.textContent = text;
+    el.className = kind || '';
+  }
+
+  /* ---------- модель ---------- */
+
+  function emptyDays(n) {
+    var d = {};
+    for (var k = 1; k <= 6; k++) { d[k] = []; for (var i = 0; i < n; i++) d[k].push(['', '']); }
+    return d;
+  }
+
+  function syncDays() {
+    for (var k = 1; k <= 6; k++) {
+      if (!state.days[k]) state.days[k] = [];
+      while (state.days[k].length < state.bells.length) state.days[k].push(['', '']);
+    }
+  }
+
+  function parseText(text) {
+    var bellMap = {}, lessons = { 1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {} }, d = 0, maxSlot = 0;
+    String(text || '').replace(/^﻿/, '').split(/\r?\n/).forEach(function (raw) {
+      var line = raw.trim();
+      if (!line || line.charAt(0) === '#') return;
+      var key = line.toLowerCase().replace(/:+$/, '');
+      if (DAYKEY.hasOwnProperty(key)) { d = DAYKEY[key]; return; }
+      var m;
+      if (d === 0) {
+        m = /^(\d+)\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/.exec(line);
+        if (m) {
+          bellMap[+m[1]] = [pad(+m[2]) + ':' + m[3], pad(+m[4]) + ':' + m[5]];
+          if (+m[1] > maxSlot) maxSlot = +m[1];
+        }
+      } else {
+        m = /^(\d+)\s+(.+)$/.exec(line);
+        if (m) {
+          var p = m[2].split('|');
+          lessons[d][+m[1]] = [p[0].trim(), (p[1] || '').trim()];
+          if (+m[1] > maxSlot) maxSlot = +m[1];
+        }
+      }
+    });
+    var bells = [], days = {}, i, k;
+    for (i = 1; i <= maxSlot; i++) bells.push(bellMap[i] || ['', '']);
+    for (k = 1; k <= 6; k++) {
+      days[k] = [];
+      for (i = 1; i <= maxSlot; i++) days[k].push(lessons[k][i] || ['', '']);
+    }
+    return { bells: bells, days: days };
+  }
+
+  function toText() {
+    var out = ['# Время звонков: номер начало-конец'];
+    state.bells.forEach(function (b, i) { if (b[0] && b[1]) out.push((i + 1) + ' ' + b[0] + '-' + b[1]); });
+    out.push('');
+    out.push('# Уроки по дням: номер предмет | кабинет');
+    for (var k = 1; k <= 6; k++) {
+      var rows = [];
+      (state.days[k] || []).forEach(function (r, i) {
+        var name = r[0].trim(), room = r[1].trim();
+        if (name) rows.push((i + 1) + ' ' + name + (room ? ' | ' + room : ''));
+      });
+      if (rows.length) { out.push(DAYS[k - 1]); rows.forEach(function (r) { out.push(r); }); }
+    }
+    return out.join('\n') + '\n';
+  }
+
+  function validate() {
+    var problems = [], total = 0, k;
+    state.bells.forEach(function (b, i) {
+      if (!b[0] && !b[1]) return;
+      var s = toMin(b[0]), e = toMin(b[1]);
+      if (s < 0 || e < 0) problems.push('Звонок ' + (i + 1) + ': заполните время начала и конца.');
+      else if (e <= s) problems.push('Звонок ' + (i + 1) + ': конец урока должен быть позже начала.');
+    });
+    for (k = 1; k <= 6; k++) {
+      (state.days[k] || []).forEach(function (r, i) {
+        if (!r[0].trim()) return;
+        total++;
+        var b = state.bells[i];
+        if (!b || toMin(b[0]) < 0 || toMin(b[1]) < 0) problems.push(DAYS[k - 1] + ', урок ' + (i + 1) + ': нет времени звонка.');
+      });
+    }
+    if (total === 0) problems.push('В расписании нет ни одного урока.');
+    return problems;
+  }
+
+  /* ---------- интерфейс ---------- */
+
+  function renderBells() {
+    var h = '';
+    state.bells.forEach(function (b, i) {
+      h += '<div class="brow"><span class="n">' + (i + 1) + '</span>' +
+        '<input type="time" data-i="' + i + '" data-k="0" value="' + esc(b[0]) + '" aria-label="Начало урока ' + (i + 1) + '">' +
+        '<span class="dash">–</span>' +
+        '<input type="time" data-i="' + i + '" data-k="1" value="' + esc(b[1]) + '" aria-label="Конец урока ' + (i + 1) + '"></div>';
+    });
+    $('bells').innerHTML = h || '<p class="muted">Звонков пока нет. Нажмите «Заполнить звонки» или «Добавить звонок».</p>';
+  }
+
+  function renderTabs() {
+    var h = '';
+    for (var k = 1; k <= 6; k++) h += '<button class="tab" role="tab" type="button" data-d="' + k + '" aria-selected="' + (k === day) + '">' + DAYS[k - 1] + '</button>';
+    $('tabs').innerHTML = h;
+  }
+
+  function renderDay() {
+    var h = '';
+    state.bells.forEach(function (b, i) {
+      var r = (state.days[day] && state.days[day][i]) || ['', ''];
+      h += '<div class="lrow"><span class="n">' + (i + 1) + '</span><span class="t">' + esc(b[0]) + '</span>' +
+        '<input data-i="' + i + '" data-k="0" value="' + esc(r[0]) + '" placeholder="Предмет" aria-label="Предмет, урок ' + (i + 1) + '">' +
+        '<input data-i="' + i + '" data-k="1" value="' + esc(r[1]) + '" placeholder="Каб." aria-label="Кабинет, урок ' + (i + 1) + '"></div>';
+    });
+    $('lessons').innerHTML = h || '<p class="muted">Сначала задайте время звонков.</p>';
+  }
+
+  function renderAll() { renderBells(); renderTabs(); renderDay(); }
+
+  function rawUrl() {
+    if (!cfg.repo) return '';
+    return 'https://raw.githubusercontent.com/' + cfg.repo + '/' + cfg.branch + '/' + cfg.path;
+  }
+
+  function showLink() {
+    var u = rawUrl();
+    $('linkBox').hidden = !u;
+    $('rawUrl').value = u;
+  }
+
+  function markDirty() {
+    dirty = true;
+    if (!busy) setStatus('Есть неопубликованные изменения');
+  }
+
+  /* ---------- настройки ---------- */
+
+  function loadCfg() {
+    try { var s = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); if (s) Object.keys(cfg).forEach(function (k) { if (typeof s[k] === 'string') cfg[k] = s[k]; }); } catch (e) { /* без сохранённых */ }
+    if (!cfg.repo) cfg.repo = guessRepo();
+  }
+
+  function saveCfg() {
+    try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch (e) { /* без сохранения */ }
+  }
+
+  function guessRepo() {
+    var h = location.hostname;
+    if (/\.github\.io$/.test(h)) {
+      var owner = h.split('.')[0];
+      var seg = location.pathname.split('/').filter(Boolean)[0];
+      if (seg && !/\.html?$/.test(seg)) return owner + '/' + seg;
+      return owner + '/' + h;
+    }
+    return '';
+  }
+
+  function fillCfgFields() {
+    $('repo').value = cfg.repo; $('path').value = cfg.path; $('branch').value = cfg.branch; $('token').value = cfg.token;
+    showLink();
+  }
+
+  function readCfgFields() {
+    cfg.repo = $('repo').value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/+$/, '');
+    cfg.path = $('path').value.trim().replace(/^\/+/, '') || 'schedule.txt';
+    cfg.branch = $('branch').value.trim() || 'main';
+    cfg.token = $('token').value.trim();
+  }
+
+  /* ---------- GitHub ---------- */
+
+  function b64enc(str) {
+    var bytes = new TextEncoder().encode(str), s = '';
+    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s);
+  }
+  function b64dec(b64) {
+    var s = atob(String(b64).replace(/\s/g, '')), bytes = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+
+  function api(path, opts) {
+    var o = opts || {};
+    o.headers = {
+      'Accept': 'application/vnd.github+json',
+      'Authorization': 'Bearer ' + cfg.token,
+      'X-GitHub-Api-Version': '2022-11-28'
+    };
+    return fetch('https://api.github.com' + path, o);
+  }
+
+  function contentsPath() {
+    return '/repos/' + cfg.repo + '/contents/' + cfg.path.split('/').map(encodeURIComponent).join('/');
+  }
+
+  async function httpError(r) {
+    var msg = '';
+    try { var j = await r.json(); msg = j && j.message ? j.message : ''; } catch (e) { /* пусто */ }
+    if (r.status === 401) return new Error('Токен не подходит. Создайте новый токен и вставьте его в «Подключение».');
+    if (r.status === 403) return new Error('Нет прав. У токена должно быть разрешение Contents: Read and write на этот репозиторий. ' + msg);
+    if (r.status === 404) return new Error('Репозиторий не найден или токен не имеет к нему доступа. Проверьте название вида имя/репозиторий.');
+    return new Error('Ошибка GitHub (' + r.status + '). ' + msg);
+  }
+
+  async function loadFromRepo() {
+    var r = await api(contentsPath() + '?ref=' + encodeURIComponent(cfg.branch));
+    if (r.status === 404) { sha = null; return null; }
+    if (!r.ok) throw await httpError(r);
+    var j = await r.json();
+    sha = j.sha;
+    return b64dec(j.content);
+  }
+
+  async function loadInitial() {
+    var text = null;
+    if (cfg.repo && cfg.token) {
+      try { text = await loadFromRepo(); setStatus(text === null ? 'Файла в репозитории ещё нет: он появится после публикации' : 'Загружено из репозитория', 'ok'); }
+      catch (e) { setStatus(e.message, 'err'); }
+    }
+    if (text === null) {
+      try {
+        var r = await fetch('schedule.txt?t=' + Date.now());
+        if (r.ok) { text = await r.text(); if (!cfg.token) setStatus('Показано опубликованное расписание. Для сохранения подключите токен.'); }
+      } catch (e) { /* открыто не с сайта */ }
+    }
+    if (text !== null) state = parseText(text);
+    if (!state.bells.length) {
+      state.bells = []; for (var i = 0; i < 7; i++) state.bells.push([fmt(495 + i * 50), fmt(535 + i * 50)]);
+      state.days = emptyDays(7);
+    }
+    syncDays();
+    renderAll();
+    $('txt').value = toText();
+    dirty = false;
+  }
+
+  async function publish() {
+    if (busy) return;
+    readCfgFields();
+    var problems = validate();
+    if (problems.length) {
+      setStatus('Нужно исправить: ' + problems[0] + (problems.length > 1 ? ' (и ещё ' + (problems.length - 1) + ')' : ''), 'err');
+      return;
+    }
+    if (!cfg.repo || !cfg.token) {
+      $('conn').open = true;
+      setStatus('Сначала заполните «Подключение»: репозиторий и токен.', 'err');
+      return;
+    }
+    saveCfg();
+    busy = true; $('pub').disabled = true; setStatus('Публикую…');
+    try {
+      if (sha === null) { try { await loadFromRepo(); } catch (e) { /* создадим файл */ } }
+      var text = toText();
+      var body = { message: 'Обновить расписание', content: b64enc(text), branch: cfg.branch };
+      if (sha) body.sha = sha;
+      var r = await api(contentsPath(), { method: 'PUT', body: JSON.stringify(body) });
+      if (r.status === 409 || r.status === 422) {
+        await loadFromRepo();
+        if (sha) body.sha = sha; else delete body.sha;
+        r = await api(contentsPath(), { method: 'PUT', body: JSON.stringify(body) });
+      }
+      if (!r.ok) throw await httpError(r);
+      var j = await r.json();
+      sha = j && j.content ? j.content.sha : sha;
+      dirty = false;
+      $('txt').value = text;
+      showLink();
+      setStatus('Опубликовано. Приложение подхватит расписание при следующей проверке (до 30 минут) или сразу по кнопке «Обновить».', 'ok');
+    } catch (e) {
+      setStatus(e.message || 'Не удалось опубликовать. Проверьте интернет.', 'err');
+    } finally {
+      busy = false; $('pub').disabled = false;
+    }
+  }
+
+  /* ---------- события ---------- */
+
+  $('bells').addEventListener('input', function (e) {
+    var t = e.target, i = t.getAttribute('data-i');
+    if (i === null) return;
+    state.bells[+i][+t.getAttribute('data-k')] = t.value;
+    markDirty();
+    var spans = $('lessons').querySelectorAll('.lrow .t');
+    if (spans[+i] && t.getAttribute('data-k') === '0') spans[+i].textContent = t.value;
+  });
+
+  $('lessons').addEventListener('input', function (e) {
+    var t = e.target, i = t.getAttribute('data-i');
+    if (i === null) return;
+    state.days[day][+i][+t.getAttribute('data-k')] = t.value;
+    markDirty();
+  });
+
+  $('tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-d]');
+    if (!b) return;
+    day = +b.getAttribute('data-d');
+    renderTabs(); renderDay();
+  });
+
+  $('gen').addEventListener('click', function () {
+    var s = toMin($('g_start').value), L = +$('g_len').value, B = +$('g_brk').value, n = +$('g_cnt').value;
+    if (!(s >= 0 && L > 0 && B >= 0 && n > 0 && n <= 12)) { setStatus('Проверьте числа в блоке «Время звонков».', 'err'); return; }
+    state.bells = [];
+    for (var i = 0; i < n; i++) { var st = s + i * (L + B); state.bells.push([fmt(st), fmt(st + L)]); }
+    syncDays(); renderAll(); markDirty();
+  });
+
+  $('addBell').addEventListener('click', function () {
+    var last = state.bells[state.bells.length - 1];
+    var s = last && toMin(last[1]) >= 0 ? toMin(last[1]) + 10 : 495;
+    state.bells.push([fmt(Math.min(s, 1380)), fmt(Math.min(s + 40, 1439))]);
+    syncDays(); renderAll(); markDirty();
+  });
+
+  $('delBell').addEventListener('click', function () {
+    var n = state.bells.length;
+    if (n <= 1) return;
+    for (var k = 1; k <= 6; k++) {
+      var r = state.days[k][n - 1];
+      if (r && r[0].trim()) { setStatus('На звонке ' + n + ' есть уроки (' + DAYS[k - 1] + '). Сначала очистите их.', 'err'); return; }
+    }
+    state.bells.pop();
+    for (k = 1; k <= 6; k++) state.days[k].length = state.bells.length;
+    renderAll(); markDirty();
+  });
+
+  $('textBox').addEventListener('toggle', function () { if ($('textBox').open) $('txt').value = toText(); });
+  $('fromTable').addEventListener('click', function () { $('txt').value = toText(); });
+  $('applyTxt').addEventListener('click', function () {
+    var m = parseText($('txt').value);
+    var count = 0;
+    for (var k = 1; k <= 6; k++) m.days[k].forEach(function (r) { if (r[0].trim()) count++; });
+    if (!m.bells.length || count === 0) { setStatus('В тексте не нашёл звонков и уроков. Проверьте формат.', 'err'); return; }
+    state = m; syncDays(); renderAll(); markDirty();
+    setStatus('Текст применён: уроков в неделю ' + count + '. Не забудьте опубликовать.');
+  });
+
+  $('saveCfg').addEventListener('click', async function () {
+    readCfgFields();
+    if (!/^[^\/\s]+\/[^\/\s]+$/.test(cfg.repo)) { setStatus('Название репозитория должно быть вида имя/репозиторий.', 'err'); return; }
+    if (!cfg.token) { setStatus('Вставьте токен GitHub.', 'err'); return; }
+    saveCfg(); showLink(); sha = null;
+    setStatus('Загружаю расписание из репозитория…');
+    try {
+      var text = await loadFromRepo();
+      if (text === null) { setStatus('Подключено. Файла в репозитории ещё нет: он появится после публикации.', 'ok'); }
+      else { state = parseText(text); syncDays(); renderAll(); $('txt').value = toText(); dirty = false; setStatus('Подключено. Расписание загружено из репозитория.', 'ok'); }
+      $('conn').open = false;
+    } catch (e) { setStatus(e.message, 'err'); }
+  });
+
+  $('forget').addEventListener('click', function () {
+    cfg.token = ''; $('token').value = ''; saveCfg(); sha = null;
+    setStatus('Токен удалён из этого браузера.');
+  });
+
+  $('copy').addEventListener('click', function () {
+    var inp = $('rawUrl');
+    function fallback() { inp.focus(); inp.select(); setStatus('Ссылка выделена, скопируйте её вручную.'); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(inp.value).then(function () { setStatus('Ссылка скопирована', 'ok'); }, fallback);
+    } else fallback();
+  });
+
+  $('pub').addEventListener('click', publish);
+
+  window.addEventListener('beforeunload', function (e) {
+    if (dirty) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  /* ---------- старт ---------- */
+  loadCfg();
+  fillCfgFields();
+  $('conn').open = !(cfg.repo && cfg.token);
+  state.bells = []; state.days = emptyDays(0);
+  loadInitial();
+
+  window.__editor = { toText: toText, parseText: parseText, get state() { return state; } };
+})();
+</script>
+</body>
+</html>
